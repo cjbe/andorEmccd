@@ -1,5 +1,7 @@
 import ctypes
 import time
+import platform
+import os
 
 # Constants returned by Andor SDK
 DRV_SUCCESS = 20002
@@ -20,21 +22,21 @@ class AndorEmccd:
     """A dumb SDK wrapper for Andor iXon EMCCD cameras.
     Note that almost all camera parameters can only be changed when the camera is not acquiring"""
     def __init__(self, leave_camera_warm=False):
+        self.leave_camera_warm = leave_camera_warm
+
         if platform.system() == "Windows":
             os.environ['PATH'] = "C:\Program Files\Andor SOLIS\Drivers" + ';' + os.environ['PATH']
             if platform.architecture()[0] == "32bit":
-                self.dll = ctypes.cdll("atmcd32d.dll")
+                self.dll = ctypes.WinDLL("atmcd32d.dll")
             else:
-                self.dll = ctypes.cdll("atmcd64d.dll")
+                self.dll = ctypes.WinDLL("atmcd64d.dll")
         elif platform.system() == "Linux":
             self.dll = ctypes.cdll.LoadLibrary("/usr/local/lib/libandor.so")
         else:
             raise Exception("Unsupported operating system")
 
-        self.leave_camera_warm = leave_camera_warm
-
-        ret = self.dll.Initialize(ctypes.byref(ctypes.c_char())))
-        if ret is not DRV_SUCCESS:
+        ret = self.dll.Initialize("")
+        if ret != DRV_SUCCESS:
             raise Exception("Could not initialise camera")
 
         self.dll.SetCoolerMode(int(not self.leave_camera_warm))
@@ -62,24 +64,24 @@ class AndorEmccd:
 
     def set_trigger_mode(self, trig_mode):
         """Set the trigger mode between internal and external"""
-        ret = self.dll.SetTriggerMode(int(trig_mode)):
-        if ret is not DRV_SUCCESS:
+        ret = self.dll.SetTriggerMode(int(trig_mode))
+        if ret != DRV_SUCCESS:
             raise Exception()
 
     def set_temperature(self, temp):
         """Set the temperature setpoint to temp deg C"""
         ret = self.dll.CoolerON()
-        if ret is not DRV_SUCCESS:
+        if ret != DRV_SUCCESS:
             raise Exception()
         ret = self.dll.SetTemperature(int(temp))
-        if ret is not DRV_SUCCESS:
+        if ret != DRV_SUCCESS:
             raise Exception()
 
     def get_temperature(self):
         """Returns the current camera temperature in deg C"""
         T = ctypes.c_int()
         ret = self.dll.GetTemperature(ctypes.byref(T))
-        if ret is not DRV_SUCCESS:
+        if ret != DRV_SUCCESS:
             raise Exception()
         return T.value
 
@@ -87,27 +89,27 @@ class AndorEmccd:
         """Set the CCD region to read out and the horizontal and vertical binning"""
         self.dll.SetReadMode(4) # Image
         ret = self.dll.SetImage(int(hBin), int(vBin), int(hStart), int(hEnd), int(vStart), int(vEnd))
-        if ret is not DRV_SUCCESS:
+        if ret != DRV_SUCCESS:
             raise Exception()
 
     def set_em_gain(self, gain):
         """Set the EM gain multiplication factor"""
         ret = self.dll.SetEMCCDGain(int(gain))
-        if ret is DRV_P1INVALID:
+        if ret == DRV_P1INVALID:
             raise Exception("Invalid EM Gain value")
-        elif ret is not DRV_SUCCESS:
+        if ret != DRV_SUCCESS:
             raise Exception()
 
     def set_exposure_time(self, time):
         """Set the CCD exposure time in seconds"""
         ret = self.dll.SetExposureTime(ctypes.c_float(time))
-        if ret is not DRV_SUCCESS:
+        if ret != DRV_SUCCESS:
             raise Exception()
 
     def set_shutter_open(self, shutter_open):
         """Open / close the camera shutter"""
         ret = self.dll.SetShutter(1, int(1 if shutter_open else 2), 0, 0)
-        if ret is not DRV_SUCCESS:
+        if ret != DRV_SUCCESS:
             raise Exception()
 
 
