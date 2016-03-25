@@ -19,6 +19,10 @@ def main():
     init_logger(args)
 
     dev = AndorEmccd()
+    def ping(self):
+        return True
+    dev.ping = ping
+
     simple_server_loop({"camera": dev}, args.bind, args.port)
 
 
