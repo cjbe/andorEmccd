@@ -2,9 +2,16 @@ import ctypes
 import time
 import platform
 import os
+import numpy as np
 
 # Constants returned by Andor SDK
 DRV_SUCCESS = 20002
+DRV_NO_NEW_DATA = 20024
+DRV_TEMPERATURE_OFF = 20034
+DRV_P1INVALID = 20066
+DRV_P2INVALID = 20067
+DRV_P3INVALID = 20068
+DRV_P4INVALID = 20069
 DRV_ACQUIRING = 20072
 DRV_NOT_INITIALIZED = 20075
 
@@ -16,6 +23,9 @@ TRIGGER_EXTERNAL = 1
 READMODE_SINGLETRACK = 3
 READMODE_IMAGE = 4
 
+# Constants for SetAcquitisionMode()
+ACQUISITION_SINGLE = 2
+ACQUISITION_RUN_TILL_ABORT = 5
 
 
 class AndorEmccd:
@@ -52,6 +62,9 @@ class AndorEmccd:
         self.ccdWidth = horiz.value
         self.ccdHeight = vert.value
 
+        # Set the default ROI to the full sensor
+        self.set_image_region(0, self.ccdWidth-1, 0, self.ccdHeight-1, hBin=1, vBin=1)
+
     def __del__(self):
         if self.leave_camera_warm:
             self.set_temperature(10)
@@ -78,15 +91,20 @@ class AndorEmccd:
             raise Exception()
 
     def get_temperature(self):
-        """Returns the current camera temperature in deg C"""
+        """Returns the current camera temperature in deg C, or None if cooler is off"""
         T = ctypes.c_int()
         ret = self.dll.GetTemperature(ctypes.byref(T))
-        if ret != DRV_SUCCESS:
+        if ret == DRV_TEMPERATURE_OFF:
+            return None
+        elif ret != DRV_SUCCESS:
             raise Exception()
         return T.value
 
     def set_image_region(hStart, hEnd, vStart, vEnd, hBin=1, vBin=1):
         """Set the CCD region to read out and the horizontal and vertical binning"""
+        self.roiWidth = (hEnd-hStart) / hBin
+        self.roiHeight = (vEnd-vStart) / vBin
+
         self.dll.SetReadMode(4) # Image
         ret = self.dll.SetImage(int(hBin), int(vBin), int(hStart), int(hEnd), int(vStart), int(vEnd))
         if ret != DRV_SUCCESS:
@@ -112,4 +130,46 @@ class AndorEmccd:
         if ret != DRV_SUCCESS:
             raise Exception()
 
+    def start_acquisition(self, single=False):
+        """Start a single or repeated acquisition. If single=False the acquisition is repeated as fast as possible, (or 
+        on every trigger, if in 'external trigger' mode) until stop_acquisition() is called."""
+        if single:
+            mode = ACQUISITION_SINGLE
+        else:
+            mode = ACQUISITION_RUN_TILL_ABORT
 
+        ret = self.dll.SetAcquisitionMode(mode)
+        if ret != DRV_SUCCESS:
+            raise Exception()
+        ret = self.dll.SetAcquisition()
+        if ret != DRV_SUCCESS:
+            raise Exception()
+
+    def stop_acquisition(self):
+        """Stop a repeated acquisition"""
+        ret = self.dll.AbortAcquisition()
+        if ret != DRV_SUCCESS:
+            raise Exception()
+
+    def wait_for_acquisition(self):
+        """Wait for a new image to become available"""
+        ret = self.dll.WaitForAcquisition()
+        if ret != DRV_SUCCESS:
+            raise Exception()
+
+    def get_image(self):
+        """Returns the oldest image in the buffer as a numpy array, or None if no new images"""
+        imSize = self.roiWidth*self.roiHeight
+        buf = (ctypes.c_int * imSize)()
+        ret = self.dll.GetOldestImage(buf, ctypes.c_ulong(imSize))
+        if ret == DRV_NO_NEW_DATA:
+            return None
+        elif ret == DRV_P2INVALID:
+            raise Exception("Internal error: Array size is incorrect")
+        elif ret != DRV_SUCCESS:
+            raise Exception()
+
+        im = np.frombuffer(buf, dtype=np.int32)
+        im = im.reshape(self.roiWidth, self.roiHeight)
+        im = np.transpose(im)
+        return im
