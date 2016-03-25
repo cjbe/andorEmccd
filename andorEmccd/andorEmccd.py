@@ -8,6 +8,7 @@ import numpy as np
 DRV_SUCCESS = 20002
 DRV_NO_NEW_DATA = 20024
 DRV_TEMPERATURE_OFF = 20034
+DRV_TEMPERATURE_NOT_REACHED = 20037
 DRV_P1INVALID = 20066
 DRV_P2INVALID = 20067
 DRV_P3INVALID = 20068
@@ -56,6 +57,11 @@ class AndorEmccd:
         # Set 'real EM gain' mode
         self.dll.SetEMGainMode(int(3))
 
+        # Find the available gains, shift speeds, etc
+        self._get_preamp_gains()
+        self._get_vertical_shift_speeds()
+        self._get_horizontal_shift_speeds()
+
         horiz = ctypes.c_int()
         vert = ctypes.c_int()
         self.dll.GetDetector(ctypes.byref(horiz), ctypes.byref(vert))
@@ -63,7 +69,11 @@ class AndorEmccd:
         self.ccdHeight = vert.value
 
         # Set the default ROI to the full sensor
-        self.set_image_region(0, self.ccdWidth-1, 0, self.ccdHeight-1, hBin=1, vBin=1)
+        self.set_image_region(1, self.ccdWidth, 1, self.ccdHeight, hBin=1, vBin=1)
+
+        # Sensible defaults
+        self.set_shutter_open(True)
+        self.set_trigger_mode(TRIGGER_INTERNAL)
 
     def __del__(self):
         if self.leave_camera_warm:
@@ -74,6 +84,105 @@ class AndorEmccd:
                 time.sleep(1)
             print("Camera now at T={}".format(self.get_temperature()))
         self.dll.ShutDown()
+
+    def _get_preamp_gains(self):
+        tmp = ctypes.c_int()
+        self.dll.GetNumberPreAmpGains(ctypes.byref(tmp))
+        n_gains = tmp.value
+        self.preamp_gains = []
+        for i in range(n_gains):
+            tmp = ctypes.c_float()
+            self.dll.GetPreAmpGain(i, ctypes.byref(tmp))
+            self.preamp_gains.append(tmp.value)
+
+    def set_preamp_gain(self, gain):
+        """Sets the pre-amp gain. gain must be one of the values in self.preamp_gains"""
+        try:
+            index = self.preamp_gains.index(gain)
+        except ValueError:
+            raise ValueError("Pre-amp gain not in {}".format(self.preamp_gains))
+        ret = self.dll.SetPreAmpGain(index)
+        if ret != DRV_SUCCESS:
+            raise Exception()
+
+    def _get_vertical_shift_speeds(self):
+        tmp = ctypes.c_int()
+        self.dll.GetNumberVSSpeeds(ctypes.byref(tmp))
+        n_gains = tmp.value
+        self.vertical_shift_speeds = []
+        for i in range(n_gains):
+            tmp = ctypes.c_float()
+            self.dll.GetVSSpeed(i, ctypes.byref(tmp))
+            self.vertical_shift_speeds.append(tmp.value)
+
+    def set_vertical_shift_speed(self, vs_speed):
+        """Sets the vertical shift speed in us. vs_speed must be one of the values in self.vertical_shift_speeds"""
+        try:
+            index = self.vertical_shift_speeds.index(vs_speed)
+        except ValueError:
+            raise ValueError("Vertical shift speed not in {}".format(self.vertical_shift_speeds))
+        ret = self.dll.SetVSSpeed(index)
+        if ret != DRV_SUCCESS:
+            raise Exception()
+
+    def set_vertical_clock_voltage(self, boost):
+        """Set the vertical shift clock voltage boost.
+        The valid range is integers between 0 (normal) and 4 (max boost)"""
+        ret = self.dll.SetVSAmplitude(int(boost))
+        if ret != DRV_SUCCESS:
+            raise Exception()
+
+    def _get_horizontal_shift_speeds(self):
+        # Get the number of ADC channels
+        tmp = ctypes.c_int()
+        self.dll.GetNumberADChannels(ctypes.byref(tmp))
+        n_adcs = tmp.value
+
+        # Get the bit depths of the ADCs
+        bit_depth = []
+        for i in range(n_adcs):
+            self.dll.GetBitDepth(ctypes.byref(tmp))
+            bit_depth.append(tmp.value)
+
+        em_gain = [True, False] # Maps gain_type to EM gain enabled
+
+        # Populate the list of horizontal shift parameters
+        self.horizontal_shift_parameters = []
+        self._horiz_index = []
+        self._adc_index = []
+        for adc in range(n_adcs):
+            for gain_type in range(2):
+                self.dll.GetNumberHSSpeeds(adc, gain_type, ctypes.byref(tmp))
+                n_speeds = tmp.value
+                for i in range(n_speeds):
+                    val = ctypes.c_float()
+                    self.dll.GetHSSpeed(adc, gain_type, i, ctypes.byref(val))
+                    self.horizontal_shift_parameters.append( (val.value, em_gain[gain_type], bit_depth[adc]) )
+                    self._horiz_index.append(i)
+                    self._adc_index.append(adc)
+
+    def set_horizontal_shift_parameters(horizontal_shift_speed, em_gain=False, adc_bit_depth=14):
+        """Set the horizontal pixel shift parameters. These are the shift speed (MHz), the ADC resolution, and the output
+        amplifier used (EM gain or conventional).
+        The tuple (horizontal_shift_speed, em_gain, adc_bit_depth) must be in self.horizontal_shift_parameters (i.e. it 
+        must be a valid combination of parameters"""
+        try:
+            param_ind = self.horizontal_shift_parameters.index( (horizontal_shift_speed, em_gain, adc_bit_depth) )
+        except ValueError:
+            raise ValueError("Invalid combination of horizontal shift parameters")
+        gain_type = int(not em_gain)
+
+        ret = self.dll.SetADChannel(self._adc_index[param_ind])
+        if ret != DRV_SUCCESS:
+            raise Exception()
+
+        ret = self.dll.SetHSSpeed(gain_type, self._horiz_index[param_ind])
+        if ret != DRV_SUCCESS:
+            raise Exception()
+
+        ret = self.dll.SetOutputAmplifier(gain_type)
+        if ret != DRV_SUCCESS:
+            raise Exception()
 
     def set_trigger_mode(self, trig_mode):
         """Set the trigger mode between internal and external"""
@@ -96,16 +205,17 @@ class AndorEmccd:
         ret = self.dll.GetTemperature(ctypes.byref(T))
         if ret == DRV_TEMPERATURE_OFF:
             return None
-        elif ret != DRV_SUCCESS:
+        elif ret != DRV_SUCCESS or ret != DRV_TEMPERATURE_NOT_REACHED:
             raise Exception()
         return T.value
 
-    def set_image_region(hStart, hEnd, vStart, vEnd, hBin=1, vBin=1):
-        """Set the CCD region to read out and the horizontal and vertical binning"""
-        self.roiWidth = (hEnd-hStart) / hBin
-        self.roiHeight = (vEnd-vStart) / vBin
+    def set_image_region(self, hStart, hEnd, vStart, vEnd, hBin=1, vBin=1):
+        """Set the CCD region to read out and the horizontal and vertical binning.
+        The region is 1 indexed and inclusive, so the valid ranges for hStart is 1..self.ccdWidth etc."""
+        self.roiWidth = int((1+hEnd-hStart) / hBin)
+        self.roiHeight = int((1+vEnd-vStart) / vBin)
 
-        self.dll.SetReadMode(4) # Image
+        self.dll.SetReadMode(READMODE_IMAGE)
         ret = self.dll.SetImage(int(hBin), int(vBin), int(hStart), int(hEnd), int(vStart), int(vEnd))
         if ret != DRV_SUCCESS:
             raise Exception()
@@ -141,7 +251,7 @@ class AndorEmccd:
         ret = self.dll.SetAcquisitionMode(mode)
         if ret != DRV_SUCCESS:
             raise Exception()
-        ret = self.dll.SetAcquisition()
+        ret = self.dll.StartAcquisition()
         if ret != DRV_SUCCESS:
             raise Exception()
 
