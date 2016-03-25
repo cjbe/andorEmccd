@@ -240,6 +240,18 @@ class AndorEmccd:
         if ret != DRV_SUCCESS:
             raise Exception()
 
+    def get_acquisition_timings(self):
+        """Returns the actual timings the camera will use, after quantisation and padding as needed by the camera hardware.
+        The timings are returned as a tuple (exposureTime, minCycleTime, minKineticTime)"""
+        exposure = ctypes.c_float()
+        accumulate = ctypes.c_float()
+        kinetic = ctypes.c_float()
+        ret = self.dll.GetAcquisitionTimings( ctypes.byref(exposure), ctypes.byref(accumulate), ctypes.byref(kinetic))
+        if ret != DRV_SUCCESS:
+            raise Exception()
+
+        return (exposure.value, accumulate.value, kinetic.value)
+
     def start_acquisition(self, single=False):
         """Start a single or repeated acquisition. If single=False the acquisition is repeated as fast as possible, (or 
         on every trigger, if in 'external trigger' mode) until stop_acquisition() is called."""
@@ -295,12 +307,12 @@ class AndorEmccd:
         elif ret != DRV_SUCCESS:
             raise Exception()
 
-        n_images = (last.value - first.value) % (2**64)
+        n_images = (1+last.value - first.value) % (2**64)
 
         im_size = self.roiWidth*self.roiHeight
         buf = (ctypes.c_int * im_size * n_images)()
         valid_first = ctypes.c_long()
-        valid_end = ctypes.c_long()
+        valid_last = ctypes.c_long()
         ret = self.dll.GetImages(first, last, buf, ctypes.c_ulong(im_size * n_images),
             ctypes.byref(valid_first), ctypes.byref(valid_last))
         if ret != DRV_SUCCESS:
@@ -310,8 +322,9 @@ class AndorEmccd:
         assert(last.value == valid_last.value)
 
         im_array = []
-        for i in n_images:
-            im = np.frombuffer(buf[(im_size*i):im_size], dtype=np.int32)
+        raw = np.frombuffer(buf, dtype=np.int32)
+        for i in range(n_images):
+            im = raw[(im_size*i):im_size]
             im = im.reshape(self.roiWidth, self.roiHeight)
             im = np.transpose(im)
             im_array.append(im)

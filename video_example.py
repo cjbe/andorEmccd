@@ -15,7 +15,8 @@ while cam.get_temperature() > -60:
 print("Camera now at {}".format(cam.get_temperature()))
 
 cam.set_shutter_open(True)
-cam.set_exposure_time(0.1)
+cam.set_vertical_shift_speed(0.3)
+cam.set_exposure_time(0.001)
 
 cam.start_acquisition()
 
