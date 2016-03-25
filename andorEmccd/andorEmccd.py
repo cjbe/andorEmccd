@@ -324,7 +324,7 @@ class AndorEmccd:
         im_array = []
         raw = np.frombuffer(buf, dtype=np.int32)
         for i in range(n_images):
-            im = raw[(im_size*i):im_size]
+            im = raw[(im_size*i):(im_size*(i+1))]
             im = im.reshape(self.roiWidth, self.roiHeight)
             im = np.transpose(im)
             im_array.append(im)
