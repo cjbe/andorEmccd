@@ -205,7 +205,7 @@ class AndorEmccd:
         ret = self.dll.GetTemperature(ctypes.byref(T))
         if ret == DRV_TEMPERATURE_OFF:
             return None
-        elif ret != DRV_SUCCESS or ret != DRV_TEMPERATURE_NOT_REACHED:
+        elif ret != DRV_SUCCESS and ret != DRV_TEMPERATURE_NOT_REACHED:
             raise Exception()
         return T.value
 
@@ -243,11 +243,6 @@ class AndorEmccd:
     def start_acquisition(self, single=False):
         """Start a single or repeated acquisition. If single=False the acquisition is repeated as fast as possible, (or 
         on every trigger, if in 'external trigger' mode) until stop_acquisition() is called."""
-
-        # Record the size of the image circular buffer for the acquisition parameters we are using
-        tmp = cbytes.c_long()
-        self.dll.GetSizeOfCircularBuffer(cbytes.byref(tmp))
-        self._circ_buffer_size = tmp.value
 
         if single:
             mode = ACQUISITION_SINGLE
@@ -300,7 +295,7 @@ class AndorEmccd:
         elif ret != DRV_SUCCESS:
             raise Exception()
 
-        n_images = (last.value - first.value) % self._circ_buffer_size
+        n_images = (last.value - first.value) % (2**64)
 
         im_size = self.roiWidth*self.roiHeight
         buf = (ctypes.c_int * im_size * n_images)()

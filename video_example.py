@@ -25,6 +25,6 @@ t_start = time.time()
 while 1:
     imVec = cam.get_all_images()
     if imVec is None:
-        pass
+        continue
     n_acquired += len(imVec)
     print("n_acquired = {}. Frame rate = {} /s".format(n_acquired, n_acquired/(time.time()-t_start)))
