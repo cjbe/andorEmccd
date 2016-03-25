@@ -93,7 +93,7 @@ class AndorEmccd:
         for i in range(n_gains):
             tmp = ctypes.c_float()
             self.dll.GetPreAmpGain(i, ctypes.byref(tmp))
-            self.preamp_gains.append(tmp.value)
+            self.preamp_gains.append( round(tmp.value,1) )
 
     def set_preamp_gain(self, gain):
         """Sets the pre-amp gain. gain must be one of the values in self.preamp_gains"""
@@ -113,7 +113,7 @@ class AndorEmccd:
         for i in range(n_gains):
             tmp = ctypes.c_float()
             self.dll.GetVSSpeed(i, ctypes.byref(tmp))
-            self.vertical_shift_speeds.append(tmp.value)
+            self.vertical_shift_speeds.append( round(tmp.value,1) )
 
     def set_vertical_shift_speed(self, vs_speed):
         """Sets the vertical shift speed in us. vs_speed must be one of the values in self.vertical_shift_speeds"""
@@ -141,7 +141,7 @@ class AndorEmccd:
         # Get the bit depths of the ADCs
         bit_depth = []
         for i in range(n_adcs):
-            self.dll.GetBitDepth(ctypes.byref(tmp))
+            self.dll.GetBitDepth(i, ctypes.byref(tmp))
             bit_depth.append(tmp.value)
 
         em_gain = [True, False] # Maps gain_type to EM gain enabled
@@ -161,7 +161,7 @@ class AndorEmccd:
                     self._horiz_index.append(i)
                     self._adc_index.append(adc)
 
-    def set_horizontal_shift_parameters(horizontal_shift_speed, em_gain=False, adc_bit_depth=14):
+    def set_horizontal_shift_parameters(self, horizontal_shift_speed, em_gain=True, adc_bit_depth=14):
         """Set the horizontal pixel shift parameters. These are the shift speed (MHz), the ADC resolution, and the output
         amplifier used (EM gain or conventional).
         The tuple (horizontal_shift_speed, em_gain, adc_bit_depth) must be in self.horizontal_shift_parameters (i.e. it 
@@ -243,6 +243,12 @@ class AndorEmccd:
     def start_acquisition(self, single=False):
         """Start a single or repeated acquisition. If single=False the acquisition is repeated as fast as possible, (or 
         on every trigger, if in 'external trigger' mode) until stop_acquisition() is called."""
+
+        # Record the size of the image circular buffer for the acquisition parameters we are using
+        tmp = cbytes.c_long()
+        self.dll.GetSizeOfCircularBuffer(cbytes.byref(tmp))
+        self._circ_buffer_size = tmp.value
+
         if single:
             mode = ACQUISITION_SINGLE
         else:
@@ -283,3 +289,35 @@ class AndorEmccd:
         im = im.reshape(self.roiWidth, self.roiHeight)
         im = np.transpose(im)
         return im
+
+    def get_all_images(self):
+        """Returns all of the images in the buffer as an array of numpy arrays, or None if no new images"""
+        first = ctypes.c_long()
+        last = ctypes.c_long()
+        ret = self.dll.GetNumberNewImages(ctypes.byref(first), ctypes.byref(last))
+        if ret == DRV_NO_NEW_DATA:
+            return None
+        elif ret != DRV_SUCCESS:
+            raise Exception()
+
+        n_images = (last.value - first.value) % self._circ_buffer_size
+
+        im_size = self.roiWidth*self.roiHeight
+        buf = (ctypes.c_int * im_size * n_images)()
+        valid_first = ctypes.c_long()
+        valid_end = ctypes.c_long()
+        ret = self.dll.GetImages(first, last, buf, ctypes.c_ulong(im_size * n_images),
+            ctypes.byref(valid_first), ctypes.byref(valid_last))
+        if ret != DRV_SUCCESS:
+            raise Exception()
+
+        assert(first.value == valid_first.value)
+        assert(last.value == valid_last.value)
+
+        im_array = []
+        for i in n_images:
+            im = np.frombuffer(buf[(im_size*i):im_size], dtype=np.int32)
+            im = im.reshape(self.roiWidth, self.roiHeight)
+            im = np.transpose(im)
+            im_array.append(im)
+        return im_array
