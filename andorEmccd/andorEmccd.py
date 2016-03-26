@@ -32,7 +32,9 @@ ACQUISITION_RUN_TILL_ABORT = 5
 class AndorEmccd:
     """A dumb SDK wrapper for Andor iXon EMCCD cameras.
     Note that almost all camera parameters can only be changed when the camera is not acquiring"""
-    def __init__(self, leave_camera_warm=False):
+    dll = None
+
+    def __init__(self, leave_camera_warm=True):
         self.leave_camera_warm = leave_camera_warm
 
         if platform.system() == "Windows":
@@ -76,6 +78,11 @@ class AndorEmccd:
         self.set_trigger_mode(TRIGGER_INTERNAL)
 
     def __del__(self):
+        if self.dll is not None:
+            self.close()
+
+    def close(self):
+        """Leave the camera in a safe state and shutdown the driver"""
         if self.leave_camera_warm:
             self.set_temperature(10)
             print("Waiting for camera to warm up ...")
@@ -84,6 +91,7 @@ class AndorEmccd:
                 time.sleep(1)
             print("Camera now at T={}".format(self.get_temperature()))
         self.dll.ShutDown()
+        self.dll = None
 
     def _get_preamp_gains(self):
         tmp = ctypes.c_int()

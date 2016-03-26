@@ -18,13 +18,15 @@ def main():
     args = get_argparser().parse_args()
     init_logger(args)
 
-    dev = AndorEmccd()
     def ping(self):
         return True
-    dev.ping = ping
+    AndorEmccd.ping = ping
+    dev = AndorEmccd()
 
-    simple_server_loop({"camera": dev}, args.bind, args.port)
-
+    try:
+        simple_server_loop({"camera": dev}, args.bind, args.port)
+    finally:
+        dev.close()
 
 if __name__ == "__main__":
     main()
