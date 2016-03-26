@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.5
 import argparse
 import sys
+import time
 
 from artiq.protocols.pc_rpc import simple_server_loop
 from artiq.tools import verbosity_args, simple_network_args, init_logger
@@ -24,6 +25,11 @@ def main():
     dev = AndorEmccd()
 
     try:
+        dev.set_temperature(-80)
+        print("Waiting for camera to cool down")
+        while dev.get_temperature() > -70:
+            time.sleep(1)
+        print("Camera cool")
         simple_server_loop({"camera": dev}, args.bind, args.port)
     finally:
         dev.close()
