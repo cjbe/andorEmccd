@@ -14,6 +14,7 @@ DRV_P2INVALID = 20067
 DRV_P3INVALID = 20068
 DRV_P4INVALID = 20069
 DRV_ACQUIRING = 20072
+DRV_IDLE = 20073
 DRV_NOT_INITIALIZED = 20075
 
 # Constants for SetTrigger()
@@ -50,6 +51,7 @@ class AndorEmccd:
 
         ret = self.dll.Initialize("")
         if ret != DRV_SUCCESS:
+            self.dll = None
             raise Exception("Could not initialise camera")
 
         self.dll.SetCoolerMode(int(not self.leave_camera_warm))
@@ -83,7 +85,10 @@ class AndorEmccd:
 
     def close(self):
         """Leave the camera in a safe state and shutdown the driver"""
+        if self.dll is None:
+            return
         if self.leave_camera_warm:
+            self.stop_acquisition()
             self.set_temperature(10)
             print("Waiting for camera to warm up ...")
             while self.get_temperature() < -20:
@@ -279,7 +284,7 @@ class AndorEmccd:
     def stop_acquisition(self):
         """Stop a repeated acquisition"""
         ret = self.dll.AbortAcquisition()
-        if ret != DRV_SUCCESS:
+        if ret != DRV_SUCCESS and ret != DRV_IDLE:
             raise Exception()
 
     def wait_for_acquisition(self):
