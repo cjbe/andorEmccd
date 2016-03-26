@@ -308,7 +308,7 @@ class AndorEmccd:
         im = np.frombuffer(buf, dtype=np.int32)
         im = im.reshape(self.roiWidth, self.roiHeight)
         im = np.transpose(im)
-        return im
+        return im.copy(order="C")
 
     def get_all_images(self):
         """Returns all of the images in the buffer as an array of numpy arrays, or None if no new images"""
@@ -340,5 +340,5 @@ class AndorEmccd:
             im = raw[(im_size*i):(im_size*(i+1))]
             im = im.reshape(self.roiWidth, self.roiHeight)
             im = np.transpose(im)
-            im_array.append(im)
+            im_array.append(im.copy(order="C"))
         return im_array
