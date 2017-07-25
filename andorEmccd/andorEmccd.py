@@ -73,7 +73,7 @@ class AndorEmccd:
         self.ccdHeight = vert.value
 
         # Set the default ROI to the full sensor
-        self.set_image_region(1, self.ccdWidth, 1, self.ccdHeight, hBin=1, vBin=1)
+        self.set_image_region(0, self.ccdWidth-1, 0, self.ccdHeight-1, hBin=1, vBin=1)
 
         # Sensible defaults
         self.set_shutter_open(True)
@@ -225,12 +225,12 @@ class AndorEmccd:
 
     def set_image_region(self, hStart, hEnd, vStart, vEnd, hBin=1, vBin=1):
         """Set the CCD region to read out and the horizontal and vertical binning.
-        The region is 1 indexed and inclusive, so the valid ranges for hStart is 1..self.ccdWidth etc."""
+        The region is 0 indexed and inclusive, so the valid ranges for hStart is 0..self.ccdWidth-1 etc."""
         self.roiWidth = int((1+hEnd-hStart) / hBin)
         self.roiHeight = int((1+vEnd-vStart) / vBin)
 
         self.dll.SetReadMode(READMODE_IMAGE)
-        ret = self.dll.SetImage(int(hBin), int(vBin), int(hStart), int(hEnd), int(vStart), int(vEnd))
+        ret = self.dll.SetImage(int(hBin), int(vBin), 1+int(hStart), 1+int(hEnd), 1+int(vStart), 1+int(vEnd))
         if ret != DRV_SUCCESS:
             raise Exception()
 
@@ -307,7 +307,8 @@ class AndorEmccd:
             raise Exception()
 
         im = np.frombuffer(buf, dtype=np.int32)
-        im = im.reshape(self.roiWidth, self.roiHeight)
+        im = im.reshape(self.roiHeight, self.roiWidth)
+
         im = np.transpose(im)
         return im.copy(order="C")
 
@@ -339,7 +340,7 @@ class AndorEmccd:
         raw = np.frombuffer(buf, dtype=np.int32)
         for i in range(n_images):
             im = raw[(im_size*i):(im_size*(i+1))]
-            im = im.reshape(self.roiWidth, self.roiHeight)
+            im = im.reshape(self.roiHeight, self.roiWidth)
             im = np.transpose(im)
             im_array.append(im.copy(order="C"))
         return im_array
