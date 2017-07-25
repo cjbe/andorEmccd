@@ -78,6 +78,7 @@ class AndorEmccd:
         # Sensible defaults
         self.set_shutter_open(True)
         self.set_trigger_mode(TRIGGER_INTERNAL)
+        self.dll.SetKineticCycleTime(0)
 
     def __del__(self):
         if self.dll is not None:
