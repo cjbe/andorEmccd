@@ -12,6 +12,7 @@ def get_argparser():
     parser = argparse.ArgumentParser()
     simple_network_args(parser, 4010)
     verbosity_args(parser)
+    parser.add_argument("--temp", default=-80, type=int)
     return parser
 
 
@@ -25,9 +26,9 @@ def main():
     dev = AndorEmccd()
 
     try:
-        dev.set_temperature(-80)
-        print("Waiting for camera to cool down")
-        while dev.get_temperature() > -70:
+        dev.set_temperature(args.temp)
+        print("Waiting for camera to cool down to {} C ...".format(args.temp))
+        while dev.get_temperature() > args.temp + 10:
             time.sleep(1)
         print("Camera cool")
         simple_server_loop({"camera": dev}, args.bind, args.port)
