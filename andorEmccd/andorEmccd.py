@@ -32,14 +32,21 @@ ACQUISITION_RUN_TILL_ABORT = 5
 
 class AndorEmccd:
     """A dumb SDK wrapper for Andor iXon EMCCD cameras.
-    Note that almost all camera parameters can only be changed when the camera is not acquiring"""
+    Note that almost all camera parameters can only be changed when the camera
+    is not acquiring"""
     dll = None
 
-    def __init__(self, leave_camera_warm=True):
+    def __init__(self, leave_camera_warm=True:
+        """Initialise the camera interface.
+
+        leave_camera_warm: turn off the cooler when disconnecting from the
+        camera.
+        """
         self.leave_camera_warm = leave_camera_warm
 
         if platform.system() == "Windows":
-            os.environ['PATH'] = "C:\Program Files\Andor SOLIS\Drivers" + ';' + os.environ['PATH']
+            os.environ['PATH'] = "C:\Program Files\Andor SOLIS\Drivers" + ';' \
+                                    + os.environ['PATH']
             if platform.architecture()[0] == "32bit":
                 self.dll = ctypes.WinDLL("atmcd32d.dll")
             else:
@@ -73,7 +80,8 @@ class AndorEmccd:
         self.ccdHeight = vert.value
 
         # Set the default ROI to the full sensor
-        self.set_image_region(0, self.ccdWidth-1, 0, self.ccdHeight-1, hBin=1, vBin=1)
+        self.set_image_region(0, self.ccdWidth-1, 0, self.ccdHeight-1, \
+                                 hBin=1, vBin=1)
 
         # Sensible defaults
         self.set_shutter_open(True)
@@ -93,7 +101,8 @@ class AndorEmccd:
             self.set_temperature(10)
             print("Waiting for camera to warm up ...")
             while self.get_temperature() < -20:
-                # Wait for camera to warm up into the safe temperature range of >-20
+                # Wait for camera to warm up into the safe temperature range 
+                # of >-20
                 time.sleep(1)
             print("Camera now at T={}".format(self.get_temperature()))
         self.dll.ShutDown()
@@ -110,7 +119,8 @@ class AndorEmccd:
             self.preamp_gains.append( round(tmp.value,1) )
 
     def set_preamp_gain(self, gain):
-        """Sets the pre-amp gain. gain must be one of the values in self.preamp_gains"""
+        """Sets the pre-amp gain. gain must be one of the values in 
+        self.preamp_gains"""
         try:
             index = self.preamp_gains.index(gain)
         except ValueError:
@@ -130,11 +140,13 @@ class AndorEmccd:
             self.vertical_shift_speeds.append( round(tmp.value,1) )
 
     def set_vertical_shift_speed(self, vs_speed):
-        """Sets the vertical shift speed in us. vs_speed must be one of the values in self.vertical_shift_speeds"""
+        """Sets the vertical shift speed in us. vs_speed must be one of the 
+        values in self.vertical_shift_speeds"""
         try:
             index = self.vertical_shift_speeds.index(vs_speed)
         except ValueError:
-            raise ValueError("Vertical shift speed not in {}".format(self.vertical_shift_speeds))
+            raise ValueError("Vertical shift speed not in {}".format(
+                                            self.vertical_shift_speeds))
         ret = self.dll.SetVSSpeed(index)
         if ret != DRV_SUCCESS:
             raise Exception()
@@ -171,17 +183,23 @@ class AndorEmccd:
                 for i in range(n_speeds):
                     val = ctypes.c_float()
                     self.dll.GetHSSpeed(adc, gain_type, i, ctypes.byref(val))
-                    self.horizontal_shift_parameters.append( (val.value, em_gain[gain_type], bit_depth[adc]) )
+                    self.horizontal_shift_parameters.append( 
+                            (val.value, em_gain[gain_type], bit_depth[adc]) )
                     self._horiz_index.append(i)
                     self._adc_index.append(adc)
 
-    def set_horizontal_shift_parameters(self, horizontal_shift_speed, em_gain=True, adc_bit_depth=14):
-        """Set the horizontal pixel shift parameters. These are the shift speed (MHz), the ADC resolution, and the output
-        amplifier used (EM gain or conventional).
-        The tuple (horizontal_shift_speed, em_gain, adc_bit_depth) must be in self.horizontal_shift_parameters (i.e. it 
-        must be a valid combination of parameters"""
+    def set_horizontal_shift_parameters(self, horizontal_shift_speed,
+                                              em_gain=True,
+                                              adc_bit_depth=14):
+        """Set the horizontal pixel shift parameters. These are the shift speed
+        (MHz), the ADC resolution, and the output amplifier used (EM gain or
+        conventional).
+        The tuple (horizontal_shift_speed, em_gain, adc_bit_depth) must be in
+        self.horizontal_shift_parameters (i.e. it must be a valid combination
+        of parameters"""
         try:
-            param_ind = self.horizontal_shift_parameters.index( (horizontal_shift_speed, em_gain, adc_bit_depth) )
+            param_ind = self.horizontal_shift_parameters.index( 
+                            (horizontal_shift_speed, em_gain, adc_bit_depth) )
         except ValueError:
             raise ValueError("Invalid combination of horizontal shift parameters")
         gain_type = int(not em_gain)
@@ -214,7 +232,8 @@ class AndorEmccd:
             raise Exception()
 
     def get_temperature(self):
-        """Returns the current camera temperature in deg C, or None if cooler is off"""
+        """Returns the current camera temperature in deg C, or None if cooler
+        is off"""
         T = ctypes.c_int()
         ret = self.dll.GetTemperature(ctypes.byref(T))
         if ret == DRV_TEMPERATURE_OFF:
@@ -224,13 +243,18 @@ class AndorEmccd:
         return T.value
 
     def set_image_region(self, hStart, hEnd, vStart, vEnd, hBin=1, vBin=1):
-        """Set the CCD region to read out and the horizontal and vertical binning.
-        The region is 0 indexed and inclusive, so the valid ranges for hStart is 0..self.ccdWidth-1 etc."""
+        """Set the CCD region to read out and the horizontal and vertical
+        binning.
+        The region is 0 indexed and inclusive, so the valid ranges for hStart
+        is 0..self.ccdWidth-1 etc."""
         self.roiWidth = int((1+hEnd-hStart) / hBin)
         self.roiHeight = int((1+vEnd-vStart) / vBin)
 
         self.dll.SetReadMode(READMODE_IMAGE)
-        ret = self.dll.SetImage(int(hBin), int(vBin), 1+int(hStart), 1+int(hEnd), 1+int(vStart), 1+int(vEnd))
+        ret = self.dll.SetImage(int(hBin), int(vBin), 1+int(hStart),
+                                                      1+int(hEnd),
+                                                      1+int(vStart),
+                                                      1+int(vEnd))
         if ret != DRV_SUCCESS:
             raise Exception()
 
@@ -255,20 +279,25 @@ class AndorEmccd:
             raise Exception()
 
     def get_acquisition_timings(self):
-        """Returns the actual timings the camera will use, after quantisation and padding as needed by the camera hardware.
-        The timings are returned as a tuple (exposureTime, minCycleTime, minKineticTime)"""
+        """Returns the actual timings the camera will use, after quantisation
+        and padding as needed by the camera hardware.
+        The timings are returned as a tuple (exposureTime, minCycleTime,
+        minKineticTime)"""
         exposure = ctypes.c_float()
         accumulate = ctypes.c_float()
         kinetic = ctypes.c_float()
-        ret = self.dll.GetAcquisitionTimings( ctypes.byref(exposure), ctypes.byref(accumulate), ctypes.byref(kinetic))
+        ret = self.dll.GetAcquisitionTimings( ctypes.byref(exposure),
+                                              ctypes.byref(accumulate),
+                                              ctypes.byref(kinetic))
         if ret != DRV_SUCCESS:
             raise Exception()
 
         return (exposure.value, accumulate.value, kinetic.value)
 
     def start_acquisition(self, single=False):
-        """Start a single or repeated acquisition. If single=False the acquisition is repeated as fast as possible, (or 
-        on every trigger, if in 'external trigger' mode) until stop_acquisition() is called."""
+        """Start a single or repeated acquisition. If single=False the
+        acquisition is repeated as fast as possible, (or on every trigger, if
+        in 'external trigger' mode) until stop_acquisition() is called."""
 
         if single:
             mode = ACQUISITION_SINGLE
@@ -295,7 +324,8 @@ class AndorEmccd:
             raise Exception()
 
     def get_image(self):
-        """Returns the oldest image in the buffer as a numpy array, or None if no new images"""
+        """Returns the oldest image in the buffer as a numpy array, or None if
+        no new images"""
         imSize = self.roiWidth*self.roiHeight
         buf = (ctypes.c_int * imSize)()
         ret = self.dll.GetOldestImage(buf, ctypes.c_ulong(imSize))
@@ -313,10 +343,12 @@ class AndorEmccd:
         return im.copy(order="C")
 
     def get_all_images(self):
-        """Returns all of the images in the buffer as an array of numpy arrays, or None if no new images"""
+        """Returns all of the images in the buffer as an array of numpy arrays,
+        or None if no new images"""
         first = ctypes.c_long()
         last = ctypes.c_long()
-        ret = self.dll.GetNumberNewImages(ctypes.byref(first), ctypes.byref(last))
+        ret = self.dll.GetNumberNewImages(ctypes.byref(first),
+                                          ctypes.byref(last))
         if ret == DRV_NO_NEW_DATA:
             return None
         elif ret != DRV_SUCCESS:
@@ -328,8 +360,9 @@ class AndorEmccd:
         buf = (ctypes.c_int * im_size * n_images)()
         valid_first = ctypes.c_long()
         valid_last = ctypes.c_long()
-        ret = self.dll.GetImages(first, last, buf, ctypes.c_ulong(im_size * n_images),
-            ctypes.byref(valid_first), ctypes.byref(valid_last))
+        ret = self.dll.GetImages(first, last, buf,
+                            ctypes.c_ulong(im_size * n_images),
+                            ctypes.byref(valid_first), ctypes.byref(valid_last))
         if ret != DRV_SUCCESS:
             raise Exception()
 
@@ -344,3 +377,4 @@ class AndorEmccd:
             im = np.transpose(im)
             im_array.append(im.copy(order="C"))
         return im_array
+
