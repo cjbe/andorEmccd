@@ -44,12 +44,13 @@ class AndorEmccd:
                 self.dll = ctypes.WinDLL("atmcd32d.dll")
             else:
                 self.dll = ctypes.WinDLL("atmcd64d.dll")
+            ret = self.dll.Initialize()
         elif platform.system() == "Linux":
             self.dll = ctypes.cdll.LoadLibrary("/usr/local/lib/libandor.so")
+            ret = self.dll.Initialize("/usr/local/etc/andor".encode())
         else:
             raise Exception("Unsupported operating system")
 
-        ret = self.dll.Initialize("")
         if ret != DRV_SUCCESS:
             self.dll = None
             raise Exception("Could not initialise camera")
