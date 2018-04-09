@@ -3,6 +3,8 @@ import time
 import platform
 import os
 import numpy as np
+import collections
+import threading
 
 # Constants returned by Andor SDK
 DRV_SUCCESS = 20002
@@ -36,11 +38,13 @@ class AndorEmccd:
     is not acquiring"""
     dll = None
 
-    def __init__(self, leave_camera_warm=True:
+    def __init__(self, leave_camera_warm=True, framebuffer_len=1000):
         """Initialise the camera interface.
 
         leave_camera_warm: turn off the cooler when disconnecting from the
         camera.
+
+        framebuffer_len: maximum number of stored frames before oldest are discarded
         """
         self.leave_camera_warm = leave_camera_warm
 
@@ -88,6 +92,14 @@ class AndorEmccd:
         self.set_shutter_open(True)
         self.set_trigger_mode(TRIGGER_INTERNAL)
         self.dll.SetKineticCycleTime(0)
+
+        self.frame_buffer = collections.deque([], framebuffer_len)
+
+        self._frame_call_list = []
+
+        # Start image acquisition thread
+        t = threading.Thread(target=self._acquisition_thread)
+        t.start()
 
     def __del__(self):
         if self.dll is not None:
@@ -324,28 +336,9 @@ class AndorEmccd:
         if ret != DRV_SUCCESS:
             raise Exception()
 
-    def get_image(self):
-        """Returns the oldest image in the buffer as a numpy array, or None if
-        no new images"""
-        imSize = self.roiWidth*self.roiHeight
-        buf = (ctypes.c_int * imSize)()
-        ret = self.dll.GetOldestImage(buf, ctypes.c_ulong(imSize))
-        if ret == DRV_NO_NEW_DATA:
-            return None
-        elif ret == DRV_P2INVALID:
-            raise Exception("Internal error: Array size is incorrect")
-        elif ret != DRV_SUCCESS:
-            raise Exception()
-
-        im = np.frombuffer(buf, dtype=np.int32)
-        im = im.reshape(self.roiHeight, self.roiWidth)
-
-        im = np.transpose(im)
-        return im.copy(order="C")
-
-    def get_all_images(self):
-        """Returns all of the images in the buffer as an array of numpy arrays,
-        or None if no new images"""
+    def _get_all_images(self):
+        """Returns all of the images in the camera buffer as an array of numpy
+        arrays, or None if no new images"""
         first = ctypes.c_long()
         last = ctypes.c_long()
         ret = self.dll.GetNumberNewImages(ctypes.byref(first),
@@ -378,3 +371,43 @@ class AndorEmccd:
             im = np.transpose(im)
             im_array.append(im.copy(order="C"))
         return im_array
+
+    def register_callback(self, f):
+        """Register a function to be called from the acquisition thread for each
+        new image"""
+        self._frame_call_list.append(f)
+
+    def deregister_callback(self, f):
+        if f in self._frame_call_list:
+            self._frame_call_list.remove(f)
+
+    def _acquisition_thread(self):
+        while True:
+            # The GIL is released in the cytes library call, so we get true
+            # multithreading until wait_for_acquisition() returns
+            self.wait_for_acquisition()
+            ims = self._get_all_images()
+            if ims is None:
+                continue
+            for im in ims:
+                self.frame_buffer.append(im)
+                for f in self._frame_call_list:
+                    f(im)
+
+    def get_image(self):
+        """Returns the oldest image in the buffer as a numpy array, or None if
+        no new images"""
+        if len(self.frame_buffer) == 0:
+            return None
+        return self.frame_buffer.popleft()
+
+    def get_all_images(self):
+        """Returns all of the images in the buffer as an array of numpy arrays,
+        or None if no new images"""
+        if len(self.frame_buffer):
+            ims = []
+            while len(self.frame_buffer) > 0:
+                ims.append(self.frame_buffer.popleft())
+        else:
+            ims = None
+        return ims
