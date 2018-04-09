@@ -38,7 +38,7 @@ class AndorEmccd:
     is not acquiring"""
     dll = None
 
-    def __init__(self, leave_camera_warm=True, framebuffer_len=1000):
+    def __init__(self, leave_camera_warm=True, framebuffer_len=100):
         """Initialise the camera interface.
 
         leave_camera_warm: turn off the cooler when disconnecting from the
@@ -98,7 +98,7 @@ class AndorEmccd:
         self._frame_call_list = []
 
         # Start image acquisition thread
-        t = threading.Thread(target=self._acquisition_thread)
+        t = threading.Thread(target=self._acquisition_thread, daemon=True)
         t.start()
 
     def __del__(self):
