@@ -55,12 +55,17 @@ class AndorEmccd:
                 self.dll = ctypes.WinDLL("atmcd32d.dll")
             else:
                 self.dll = ctypes.WinDLL("atmcd64d.dll")
-            ret = self.dll.Initialize()
+            path = None
         elif platform.system() == "Linux":
             self.dll = ctypes.cdll.LoadLibrary("/usr/local/lib/libandor.so")
-            ret = self.dll.Initialize("/usr/local/etc/andor".encode())
+            path = "/usr/local/etc/andor".encode()
         else:
             raise Exception("Unsupported operating system")
+
+        if path:
+            ret = self.dll.Initialize(path)
+        else:
+            ret = self.dll.Initialize()
 
         if ret != DRV_SUCCESS:
             self.dll = None
@@ -200,6 +205,9 @@ class AndorEmccd:
                             (val.value, em_gain[gain_type], bit_depth[adc]) )
                     self._horiz_index.append(i)
                     self._adc_index.append(adc)
+
+    def get_horizontal_shift_parameters(self):
+        return self.horizontal_shift_parameters
 
     def set_horizontal_shift_parameters(self, horizontal_shift_speed,
                                               em_gain=True,
@@ -400,6 +408,11 @@ class AndorEmccd:
         if len(self.frame_buffer) == 0:
             return None
         return self.frame_buffer.popleft()
+
+    def flush_images(self):
+        """Delete all images from the buffer"""
+        while len(self.frame_buffer) > 0:
+            self.frame_buffer.popleft()
 
     def get_all_images(self):
         """Returns all of the images in the buffer as an array of numpy arrays,
