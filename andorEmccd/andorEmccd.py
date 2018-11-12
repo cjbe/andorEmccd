@@ -83,6 +83,10 @@ class AndorEmccd:
         self._get_vertical_shift_speeds()
         self._get_horizontal_shift_speeds()
 
+        # Sensible non-EM parameters
+        self.set_horizontal_shift_parameters(
+            3, em_gain=False, adc_bit_depth=16)
+
         horiz = ctypes.c_int()
         vert = ctypes.c_int()
         self.dll.GetDetector(ctypes.byref(horiz), ctypes.byref(vert))
@@ -237,6 +241,8 @@ class AndorEmccd:
         if ret != DRV_SUCCESS:
             raise Exception()
 
+        self._em_gain_enabled = em_gain
+
     def set_trigger_mode(self, trig_mode):
         """Set the trigger mode between internal and external"""
         ret = self.dll.SetTriggerMode(int(trig_mode))
@@ -377,6 +383,9 @@ class AndorEmccd:
             im = raw[(im_size*i):(im_size*(i+1))]
             im = im.reshape(self.roiHeight, self.roiWidth)
             im = np.transpose(im)
+            if not self._em_gain_enabled:
+                # Ensure image orientation is the same as for the EM amplifier
+                im = np.flipud(im)
             im_array.append(im.copy(order="C"))
         return im_array
 
@@ -391,7 +400,7 @@ class AndorEmccd:
 
     def _acquisition_thread(self):
         while True:
-            # The GIL is released in the cytes library call, so we get true
+            # The GIL is released in the ctypes library call, so we get true
             # multithreading until wait_for_acquisition() returns
             self.wait_for_acquisition()
             ims = self._get_all_images()
