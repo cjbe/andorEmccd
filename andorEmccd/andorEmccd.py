@@ -204,12 +204,6 @@ class AndorEmccd:
         if self.leave_camera_warm:
             self.stop_acquisition()
             self.set_temperature(10)
-            print("Waiting for camera to warm up ...")
-            while self.get_temperature() < -20:
-                # Wait for camera to warm up into the safe temperature range 
-                # of >-20
-                time.sleep(1)
-            print("Camera now at T={}".format(self.get_temperature()))
         self.lib.shutdown()
         self.lib = None
 
