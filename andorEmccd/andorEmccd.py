@@ -457,7 +457,7 @@ class AndorEmccd:
         with self.lock_camera():
             self.lib.abort_acquisition()
 
-    def wait_for_acquisition(self):
+    def _wait_for_acquisition(self):
         """Wait for a new image to become available"""
         with self.lock_camera():
             self.lib.wait_for_acquisition()
@@ -530,6 +530,16 @@ class AndorEmccd:
         if len(self.frame_buffer) == 0:
             return None
         return self.frame_buffer.popleft()
+
+    def wait_for_image(self):
+        """Returns the oldest image in the buffer as a numpy array, blocking until there
+        is an image available"""
+        while True:
+            im = self.get_image()
+            if im is not None:
+                break
+            time.sleep(10e-3)
+        return im
 
     def flush_images(self):
         """Delete all images from the buffer"""
