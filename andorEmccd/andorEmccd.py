@@ -29,6 +29,7 @@ class LibInstance:
         20002: "DRV_SUCCESS",
         20024: "DRV_NO_NEW_DATA",
         20034: "DRV_TEMPERATURE_OFF",
+        20035: "DRV_TEMP_NOT_STABILIZED",
         20037: "DRV_TEMPERATURE_NOT_REACHED",
         20066: "DRV_P1INVALID",
         20067: "DRV_P2INVALID",
@@ -83,7 +84,7 @@ class LibInstance:
             ret = dll.GetTemperature(ctypes.byref(t))
             if self.return_codes.get(ret, "UNKNOWN") == "DRV_TEMPERATURE_OFF":
                 return None
-            err_check(ret, ["DRV_SUCCESS", "DRV_TEMPERATURE_NOT_REACHED"])
+            err_check(ret, ["DRV_SUCCESS", "DRV_TEMPERATURE_NOT_REACHED", "DRV_TEMP_NOT_STABILIZED"])
             return t.value
         self.get_temperature = get_temperature
 
