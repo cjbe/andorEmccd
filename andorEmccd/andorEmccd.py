@@ -138,6 +138,8 @@ class LibInstance:
         self.get_camera_handle = wrapper(dll.GetCameraHandle, [c_int, POINTER(c_long)])
         self.get_camera_serial = wrapper(dll.GetCameraSerialNumber, [POINTER(c_int)])
         self.set_current_camera = wrapper(dll.SetCurrentCamera, [c_long])
+        self.set_cameralink_mode = wrapper(dll.SetCameraLinkMode, [c_int])
+
 
     @contextlib.contextmanager
     def lock_select_camera(self, camera_index):
@@ -436,6 +438,11 @@ class AndorEmccd:
                                                   ctypes.byref(accumulate),
                                                   ctypes.byref(kinetic))
             return (exposure.value, accumulate.value, kinetic.value)
+
+    def set_cameralink_mode(self, enable):
+        """Enable or disable camera link output"""
+        with self.lock_camera():
+            self.lib.set_cameralink_mode(1 if enable else 0)
 
     def start_acquisition(self, single=False):
         """Start a single or repeated acquisition. If single=False the
