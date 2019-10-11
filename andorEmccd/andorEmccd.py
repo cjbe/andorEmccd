@@ -131,7 +131,7 @@ class LibInstance:
         self.set_image = wrapper(dll.SetImage, [c_int]*6)
         self.set_em_gain = wrapper(dll.SetEMCCDGain, [c_int])
         self.set_exposure_time = wrapper(dll.SetExposureTime, [c_float])
-        self.set_shutter = wrapper(dll.SetShutter, [c_int])
+        self.set_shutter = wrapper(dll.SetShutter, [c_int,c_int,c_int,c_int])
         self.get_acquisition_timings = wrapper(dll.GetAcquisitionTimings,
             [POINTER(c_float)]*3)
         self.set_acquisition_mode = wrapper(dll.SetAcquisitionMode, [c_int])
@@ -231,7 +231,7 @@ class AndorEmccd:
 
         # Sensible non-EM parameters
         self.set_horizontal_shift_parameters(
-            3, em_gain=False, adc_bit_depth=16)
+            3, em_gain=False, adc_bit_depth=14)
 
         horiz = c_int()
         vert = c_int()
