@@ -405,6 +405,19 @@ class AndorEmccd:
         binning.
         The region is 0 indexed and inclusive, so the valid ranges for hStart
         is 0..self.ccdWidth-1 etc."""
+
+        def out_of_range(val, max):
+            return val < 0 or val > max-1
+
+        if out_of_range(hStart, self.ccdWidth):
+            raise ValueError("hStart out of range")
+        if out_of_range(hEnd, self.ccdWidth):
+            raise ValueError("hEnd out of range")
+        if out_of_range(vStart, self.ccdHeight):
+            raise ValueError("vStart out of range")
+        if out_of_range(vEnd, self.ccdHeight):
+            raise ValueError("vEnd out of range")
+
         self.roiWidth = int((1+hEnd-hStart) / hBin)
         self.roiHeight = int((1+vEnd-vStart) / vBin)
 
